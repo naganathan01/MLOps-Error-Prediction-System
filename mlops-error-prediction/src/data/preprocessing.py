@@ -375,4 +375,211 @@ class DataPreprocessor:
         }
         
         if config:
-            default
+            default_config.update(config)
+        
+        self.preprocessing_config = default_config
+        processed_df = df.copy()
+        
+        # Step 1: Handle missing values
+        if default_config['handle_missing']:
+            processed_df = self.handle_missing_values(
+                processed_df, 
+                strategy=default_config['missing_strategy']
+            )
+        
+        # Step 2: Create derived features
+        if default_config['create_derived']:
+            processed_df = self.create_derived_features(processed_df)
+        
+        # Step 3: Handle outliers
+        if default_config['handle_outliers']:
+            processed_df, outlier_summary = self.detect_and_handle_outliers(
+                processed_df,
+                method=default_config['outlier_method'],
+                threshold=default_config['outlier_threshold']
+            )
+        
+        # Step 4: Remove low variance features
+        if default_config['remove_low_variance']:
+            processed_df = self.remove_low_variance_features(
+                processed_df,
+                threshold=default_config['variance_threshold']
+            )
+        
+        # Step 5: Handle class imbalance
+        if default_config['handle_imbalance']:
+            processed_df = self.handle_class_imbalance(
+                processed_df,
+                method=default_config['balance_method']
+            )
+        
+        # Step 6: Normalize data (do this last to avoid affecting other steps)
+        if default_config['normalize']:
+            processed_df = self.normalize_data(
+                processed_df,
+                method=default_config['normalization_method']
+            )
+        
+        logger.info("✅ Preprocessing pipeline completed successfully!")
+        logger.info(f"Final dataset shape: {processed_df.shape}")
+        
+        return processed_df
+    
+    def save_preprocessing_artifacts(self, output_dir: str = "models"):
+        """Save preprocessing artifacts for later use"""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
+        
+        # Save scalers
+        if self.scalers:
+            for scaler_name, scaler in self.scalers.items():
+                scaler_path = output_dir / f"{scaler_name}_scaler.joblib"
+                import joblib
+                joblib.dump(scaler, scaler_path)
+                logger.info(f"💾 Saved {scaler_name} scaler to {scaler_path}")
+        
+        # Save imputers
+        if self.imputers:
+            for imputer_name, imputer in self.imputers.items():
+                imputer_path = output_dir / f"{imputer_name}_imputer.joblib"
+                import joblib
+                joblib.dump(imputer, imputer_path)
+                logger.info(f"💾 Saved {imputer_name} imputer to {imputer_path}")
+        
+        # Save preprocessing configuration
+        config_path = output_dir / "preprocessing_config.json"
+        with open(config_path, 'w') as f:
+            json.dump(self.preprocessing_config, f, indent=2, default=str)
+        logger.info(f"💾 Saved preprocessing config to {config_path}")
+    
+    def generate_preprocessing_report(self, original_df: pd.DataFrame, 
+                                    processed_df: pd.DataFrame) -> dict:
+        """Generate a preprocessing report"""
+        report = {
+            'timestamp': datetime.now().isoformat(),
+            'original_shape': original_df.shape,
+            'processed_shape': processed_df.shape,
+            'preprocessing_config': self.preprocessing_config,
+            'changes': {
+                'rows_added': processed_df.shape[0] - original_df.shape[0],
+                'columns_added': processed_df.shape[1] - original_df.shape[1],
+                'missing_values_before': original_df.isnull().sum().sum(),
+                'missing_values_after': processed_df.isnull().sum().sum()
+            },
+            'column_changes': {
+                'original_columns': list(original_df.columns),
+                'processed_columns': list(processed_df.columns),
+                'added_columns': list(set(processed_df.columns) - set(original_df.columns)),
+                'removed_columns': list(set(original_df.columns) - set(processed_df.columns))
+            }
+        }
+        
+        return report
+    
+    def apply_saved_preprocessing(self, df: pd.DataFrame, artifacts_dir: str = "models") -> pd.DataFrame:
+        """Apply saved preprocessing artifacts to new data"""
+        logger.info("🔄 Applying saved preprocessing artifacts...")
+        
+        artifacts_dir = Path(artifacts_dir)
+        processed_df = df.copy()
+        
+        # Load and apply scalers
+        for scaler_file in artifacts_dir.glob("*_scaler.joblib"):
+            scaler_name = scaler_file.stem.replace('_scaler', '')
+            
+            try:
+                import joblib
+                scaler = joblib.load(scaler_file)
+                
+                # Apply scaler to numeric columns (excluding target and timestamp)
+                exclude_columns = ['timestamp', 'failure_within_hour', 'system_state']
+                numeric_columns = processed_df.select_dtypes(include=[np.number]).columns
+                columns_to_scale = [col for col in numeric_columns if col not in exclude_columns]
+                
+                if len(columns_to_scale) > 0:
+                    processed_df[columns_to_scale] = scaler.transform(processed_df[columns_to_scale])
+                    logger.info(f"   Applied {scaler_name} scaler")
+                    
+            except Exception as e:
+                logger.warning(f"   Failed to apply {scaler_name} scaler: {str(e)}")
+        
+        # Load and apply imputers
+        for imputer_file in artifacts_dir.glob("*_imputer.joblib"):
+            imputer_name = imputer_file.stem.replace('_imputer', '')
+            
+            try:
+                import joblib
+                imputer = joblib.load(imputer_file)
+                
+                # Apply imputer based on name
+                if imputer_name == 'numeric':
+                    numeric_columns = processed_df.select_dtypes(include=[np.number]).columns
+                    processed_df[numeric_columns] = imputer.transform(processed_df[numeric_columns])
+                else:
+                    if imputer_name in processed_df.columns:
+                        processed_df[imputer_name] = imputer.transform(processed_df[[imputer_name]]).ravel()
+                
+                logger.info(f"   Applied {imputer_name} imputer")
+                
+            except Exception as e:
+                logger.warning(f"   Failed to apply {imputer_name} imputer: {str(e)}")
+        
+        logger.info("✅ Preprocessing artifacts applied")
+        return processed_df
+
+def main():
+    """Example usage of DataPreprocessor"""
+    preprocessor = DataPreprocessor()
+    
+    # Example with synthetic data
+    import numpy as np
+    
+    # Create sample data with issues
+    np.random.seed(42)
+    sample_data = pd.DataFrame({
+        'timestamp': pd.date_range('2024-01-01', periods=1000, freq='H'),
+        'cpu_usage': np.random.uniform(0, 100, 1000),
+        'memory_usage': np.concatenate([np.random.uniform(20, 80, 950), [None] * 50]),  # Missing values
+        'disk_usage': np.concatenate([np.random.uniform(10, 90, 990), [150, 200] * 5]),  # Outliers
+        'error_count': np.random.poisson(2, 1000),
+        'response_time_ms': np.random.uniform(100, 1000, 1000),
+        'failure_within_hour': np.random.choice([0, 1], 1000, p=[0.8, 0.2])  # Imbalanced
+    })
+    
+    print("🔍 Original data summary:")
+    print(f"Shape: {sample_data.shape}")
+    print(f"Missing values: {sample_data.isnull().sum().sum()}")
+    print(f"Target distribution: {sample_data['failure_within_hour'].value_counts().to_dict()}")
+    
+    # Apply preprocessing pipeline
+    config = {
+        'handle_missing': True,
+        'handle_outliers': True,
+        'create_derived': True,
+        'normalize': True,
+        'handle_imbalance': True,
+        'balance_method': 'oversample'
+    }
+    
+    processed_data = preprocessor.preprocess_pipeline(sample_data, config)
+    
+    print("\n✅ Processed data summary:")
+    print(f"Shape: {processed_data.shape}")
+    print(f"Missing values: {processed_data.isnull().sum().sum()}")
+    if 'failure_within_hour' in processed_data.columns:
+        print(f"Target distribution: {processed_data['failure_within_hour'].value_counts().to_dict()}")
+    
+    # Generate report
+    report = preprocessor.generate_preprocessing_report(sample_data, processed_data)
+    print(f"\n📊 Processing Report:")
+    print(f"Rows changed: {report['changes']['rows_added']}")
+    print(f"Columns added: {report['changes']['columns_added']}")
+    print(f"Missing values removed: {report['changes']['missing_values_before'] - report['changes']['missing_values_after']}")
+    
+    # Save artifacts
+    preprocessor.save_preprocessing_artifacts("models")
+    
+    print("\n🎉 Preprocessing completed successfully!")
+
+if __name__ == "__main__":
+    main()
