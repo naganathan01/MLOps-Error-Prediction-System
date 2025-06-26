@@ -1,371 +1,282 @@
 """
-Model training pipeline for error prediction.
+Standalone model training script.
+Can be used to train models independently or retrain existing models.
 """
 
-import pandas as pd
-import numpy as np
+import sys
+import logging
+import argparse
 from pathlib import Path
-import joblib
+import yaml
 import json
 from datetime import datetime
 
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
-import xgboost as xgb
+# Add src to Python path
+sys.path.append(str(Path(__file__).parent.parent))
 
-import mlflow
-import mlflow.sklearn
-import warnings
-warnings.filterwarnings('ignore')
+from src.models.training import ModelTrainer
 
-class ModelTrainer:
-    def __init__(self, data_dir="data", model_dir="models"):
-        self.data_dir = Path(data_dir)
-        self.model_dir = Path(model_dir)
-        self.model_dir.mkdir(exist_ok=True)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class TrainingScript:
+    def __init__(self, config_path="config/config.yaml"):
+        self.config_path = Path(config_path)
+        self.config = self.load_config()
         
-        # Initialize MLflow
-        mlflow.set_tracking_uri("file:./mlruns")
-        mlflow.set_experiment("error_prediction")
-        
-        self.models = {}
-        self.scalers = {}
-        self.feature_columns = None
-        
-    def load_data(self):
-        """Load processed features"""
-        print("📂 Loading processed data...")
-        
-        features_file = self.data_dir / "processed" / "features.csv"
-        if not features_file.exists():
-            raise FileNotFoundError(f"Features file not found: {features_file}")
-        
-        self.df = pd.read_csv(features_file)
-        print(f"✅ Loaded {len(self.df)} samples with {len(self.df.columns)} features")
-        
-        # Prepare features and target
-        target_col = 'failure_within_hour'
-        exclude_cols = ['timestamp', 'system_state', target_col]
-        
-        self.feature_columns = [col for col in self.df.columns if col not in exclude_cols]
-        self.X = self.df[self.feature_columns]
-        self.y = self.df[target_col]
-        
-        print(f"🎯 Target distribution:")
-        print(f"   No failure: {(self.y == 0).sum()} ({(self.y == 0).mean():.2%})")
-        print(f"   Failure: {(self.y == 1).sum()} ({(self.y == 1).mean():.2%})")
-        
-    def prepare_data(self, test_size=0.2, random_state=42):
-        """Split and scale data"""
-        print("🔄 Preparing data for training...")
-        
-        # Split data
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            self.X, self.y, test_size=test_size, random_state=random_state, stratify=self.y
-        )
-        
-        # Scale features
-        self.scaler = StandardScaler()
-        self.X_train_scaled = self.scaler.fit_transform(self.X_train)
-        self.X_test_scaled = self.scaler.transform(self.X_test)
-        
-        print(f"📊 Data split:")
-        print(f"   Training: {len(self.X_train)} samples")
-        print(f"   Testing: {len(self.X_test)} samples")
-        
-    def train_random_forest(self):
-        """Train Random Forest model"""
-        print("🌲 Training Random Forest model...")
-        
-        with mlflow.start_run(run_name="RandomForest"):
-            # Hyperparameter tuning
-            param_grid = {
-                'n_estimators': [100, 200],
-                'max_depth': [10, 20, None],
-                'min_samples_split': [2, 5],
-                'min_samples_leaf': [1, 2]
-            }
-            
-            rf = RandomForestClassifier(random_state=42, class_weight='balanced')
-            grid_search = GridSearchCV(
-                rf, param_grid, cv=3, scoring='roc_auc', n_jobs=-1, verbose=1
-            )
-            
-            grid_search.fit(self.X_train, self.y_train)
-            
-            # Best model
-            best_rf = grid_search.best_estimator_
-            
-            # Predictions
-            y_pred = best_rf.predict(self.X_test)
-            y_pred_proba = best_rf.predict_proba(self.X_test)[:, 1]
-            
-            # Metrics
-            auc_score = roc_auc_score(self.y_test, y_pred_proba)
-            
-            # Log parameters and metrics
-            mlflow.log_params(grid_search.best_params_)
-            mlflow.log_metric("auc_score", auc_score)
-            mlflow.log_metric("accuracy", best_rf.score(self.X_test, self.y_test))
-            
-            # Log model
-            mlflow.sklearn.log_model(best_rf, "random_forest_model")
-            
-            self.models['random_forest'] = best_rf
-            
-            print(f"✅ Random Forest trained - AUC: {auc_score:.4f}")
-            print(f"   Best params: {grid_search.best_params_}")
-            
-            return best_rf, auc_score
+    def load_config(self):
+        """Load configuration"""
+        try:
+            with open(self.config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except FileNotFoundError:
+            logger.warning(f"Config file not found: {self.config_path}")
+            return {}
+        except Exception as e:
+            logger.error(f"Failed to load config: {str(e)}")
+            return {}
     
-    def train_xgboost(self):
-        """Train XGBoost model"""
-        print("🚀 Training XGBoost model...")
+    def validate_data(self):
+        """Validate that required data exists"""
+        logger.info("🔍 Validating training data...")
         
-        with mlflow.start_run(run_name="XGBoost"):
-            # Hyperparameter tuning
-            param_grid = {
-                'n_estimators': [100, 200],
-                'max_depth': [3, 6, 10],
-                'learning_rate': [0.01, 0.1, 0.2],
-                'subsample': [0.8, 1.0]
-            }
-            
-            # Calculate scale_pos_weight for imbalanced data
-            scale_pos_weight = (self.y_train == 0).sum() / (self.y_train == 1).sum()
-            
-            xgb_model = xgb.XGBClassifier(
-                random_state=42,
-                scale_pos_weight=scale_pos_weight,
-                eval_metric='logloss'
-            )
-            
-            grid_search = GridSearchCV(
-                xgb_model, param_grid, cv=3, scoring='roc_auc', n_jobs=-1, verbose=1
-            )
-            
-            grid_search.fit(self.X_train, self.y_train)
-            
-            # Best model
-            best_xgb = grid_search.best_estimator_
-            
-            # Predictions
-            y_pred = best_xgb.predict(self.X_test)
-            y_pred_proba = best_xgb.predict_proba(self.X_test)[:, 1]
-            
-            # Metrics
-            auc_score = roc_auc_score(self.y_test, y_pred_proba)
-            
-            # Log parameters and metrics
-            mlflow.log_params(grid_search.best_params_)
-            mlflow.log_metric("auc_score", auc_score)
-            mlflow.log_metric("accuracy", best_xgb.score(self.X_test, self.y_test))
-            
-            # Log model
-            mlflow.sklearn.log_model(best_xgb, "xgboost_model")
-            
-            self.models['xgboost'] = best_xgb
-            
-            print(f"✅ XGBoost trained - AUC: {auc_score:.4f}")
-            print(f"   Best params: {grid_search.best_params_}")
-            
-            return best_xgb, auc_score
+        required_files = [
+            "data/processed/features.csv"
+        ]
+        
+        missing_files = []
+        for file_path in required_files:
+            if not Path(file_path).exists():
+                missing_files.append(file_path)
+        
+        if missing_files:
+            logger.error(f"❌ Missing required files: {missing_files}")
+            logger.info("💡 Run feature engineering first:")
+            logger.info("   python src/features/feature_engineering.py")
+            return False
+        
+        logger.info("✅ Training data validated")
+        return True
     
-    def train_logistic_regression(self):
-        """Train Logistic Regression model"""
-        print("📈 Training Logistic Regression model...")
+    def train_single_model(self, model_type):
+        """Train a single model type"""
+        logger.info(f"🤖 Training {model_type} model...")
         
-        with mlflow.start_run(run_name="LogisticRegression"):
-            # Hyperparameter tuning
-            param_grid = {
-                'C': [0.1, 1.0, 10.0],
-                'penalty': ['l1', 'l2'],
-                'solver': ['liblinear']
-            }
+        try:
+            trainer = ModelTrainer()
+            trainer.load_data()
+            trainer.prepare_data()
             
-            lr = LogisticRegression(random_state=42, class_weight='balanced', max_iter=1000)
-            grid_search = GridSearchCV(
-                lr, param_grid, cv=3, scoring='roc_auc', n_jobs=-1, verbose=1
-            )
-            
-            grid_search.fit(self.X_train_scaled, self.y_train)
-            
-            # Best model
-            best_lr = grid_search.best_estimator_
-            
-            # Predictions
-            y_pred = best_lr.predict(self.X_test_scaled)
-            y_pred_proba = best_lr.predict_proba(self.X_test_scaled)[:, 1]
-            
-            # Metrics
-            auc_score = roc_auc_score(self.y_test, y_pred_proba)
-            
-            # Log parameters and metrics
-            mlflow.log_params(grid_search.best_params_)
-            mlflow.log_metric("auc_score", auc_score)
-            mlflow.log_metric("accuracy", best_lr.score(self.X_test_scaled, self.y_test))
-            
-            # Log model
-            mlflow.sklearn.log_model(best_lr, "logistic_regression_model")
-            
-            self.models['logistic_regression'] = best_lr
-            
-            print(f"✅ Logistic Regression trained - AUC: {auc_score:.4f}")
-            print(f"   Best params: {grid_search.best_params_}")
-            
-            return best_lr, auc_score
-    
-    def evaluate_models(self):
-        """Evaluate all trained models"""
-        print("📊 Evaluating all models...")
-        
-        results = {}
-        
-        for name, model in self.models.items():
-            print(f"\n🔍 Evaluating {name}...")
-            
-            # Use scaled data for logistic regression
-            if name == 'logistic_regression':
-                X_test_eval = self.X_test_scaled
+            if model_type.lower() == 'random_forest':
+                model, score = trainer.train_random_forest()
+            elif model_type.lower() == 'xgboost':
+                model, score = trainer.train_xgboost()
+            elif model_type.lower() == 'logistic_regression':
+                model, score = trainer.train_logistic_regression()
             else:
-                X_test_eval = self.X_test
+                logger.error(f"❌ Unknown model type: {model_type}")
+                return False
             
-            # Predictions
-            y_pred = model.predict(X_test_eval)
-            y_pred_proba = model.predict_proba(X_test_eval)[:, 1]
+            # Save the single model
+            trainer.models = {model_type.lower(): model}
+            trainer.save_models()
             
-            # Metrics
-            auc_score = roc_auc_score(self.y_test, y_pred_proba)
-            accuracy = model.score(X_test_eval, self.y_test)
+            logger.info(f"✅ {model_type} training completed with AUC: {score:.4f}")
+            return True
             
-            # Classification report
-            report = classification_report(self.y_test, y_pred, output_dict=True)
-            
-            results[name] = {
-                'auc_score': auc_score,
-                'accuracy': accuracy,
-                'precision': report['1']['precision'],
-                'recall': report['1']['recall'],
-                'f1_score': report['1']['f1-score']
-            }
-            
-            print(f"   AUC: {auc_score:.4f}")
-            print(f"   Accuracy: {accuracy:.4f}")
-            print(f"   Precision: {report['1']['precision']:.4f}")
-            print(f"   Recall: {report['1']['recall']:.4f}")
-            print(f"   F1-Score: {report['1']['f1-score']:.4f}")
-        
-        # Find best model
-        best_model_name = max(results.keys(), key=lambda x: results[x]['auc_score'])
-        best_model = self.models[best_model_name]
-        
-        print(f"\n🏆 Best model: {best_model_name} (AUC: {results[best_model_name]['auc_score']:.4f})")
-        
-        return results, best_model_name, best_model
-    
-    def save_models(self):
-        """Save trained models and metadata"""
-        print("💾 Saving models...")
-        
-        # Save each model
-        for name, model in self.models.items():
-            model_file = self.model_dir / f"{name}_model.joblib"
-            joblib.dump(model, model_file)
-            print(f"   Saved {name} to {model_file}")
-        
-        # Save scaler
-        scaler_file = self.model_dir / "scaler.joblib"
-        joblib.dump(self.scaler, scaler_file)
-        
-        # Save feature columns
-        features_file = self.model_dir / "feature_columns.json"
-        with open(features_file, 'w') as f:
-            json.dump(self.feature_columns, f, indent=2)
-        
-        # Save metadata
-        metadata = {
-            'training_date': datetime.now().isoformat(),
-            'total_samples': len(self.df),
-            'training_samples': len(self.X_train),
-            'testing_samples': len(self.X_test),
-            'feature_count': len(self.feature_columns),
-            'target_distribution': {
-                'no_failure': int((self.y == 0).sum()),
-                'failure': int((self.y == 1).sum())
-            }
-        }
-        
-        metadata_file = self.model_dir / "training_metadata.json"
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        print(f"✅ All models and metadata saved to {self.model_dir}")
-    
-    def get_feature_importance(self, model_name='random_forest'):
-        """Get feature importance from tree-based models"""
-        if model_name not in self.models:
-            print(f"Model {model_name} not found")
-            return None
-        
-        model = self.models[model_name]
-        
-        if hasattr(model, 'feature_importances_'):
-            importance_df = pd.DataFrame({
-                'feature': self.feature_columns,
-                'importance': model.feature_importances_
-            }).sort_values('importance', ascending=False)
-            
-            print(f"\n🔥 Top 10 features for {model_name}:")
-            print(importance_df.head(10).to_string(index=False))
-            
-            # Save feature importance
-            importance_file = self.model_dir / f"{model_name}_feature_importance.csv"
-            importance_df.to_csv(importance_file, index=False)
-            
-            return importance_df
-        else:
-            print(f"Model {model_name} doesn't have feature_importances_ attribute")
-            return None
+        except Exception as e:
+            logger.error(f"❌ Training failed: {str(e)}")
+            return False
     
     def train_all_models(self):
-        """Train all models in the pipeline"""
-        print("🚀 Starting model training pipeline...")
+        """Train all available models"""
+        logger.info("🤖 Training all models...")
         
-        # Load and prepare data
-        self.load_data()
-        self.prepare_data()
+        try:
+            trainer = ModelTrainer()
+            results, best_model_name, best_model = trainer.train_all_models()
+            
+            # Print results summary
+            logger.info("\n📊 Training Results Summary:")
+            logger.info("-" * 50)
+            
+            for model_name, metrics in results.items():
+                logger.info(f"{model_name.upper()}:")
+                logger.info(f"  AUC Score: {metrics['auc_score']:.4f}")
+                logger.info(f"  Accuracy:  {metrics['accuracy']:.4f}")
+                logger.info(f"  Precision: {metrics['precision']:.4f}")
+                logger.info(f"  Recall:    {metrics['recall']:.4f}")
+                logger.info(f"  F1-Score:  {metrics['f1_score']:.4f}")
+                logger.info("")
+            
+            logger.info(f"🏆 Best Model: {best_model_name}")
+            logger.info(f"🏆 Best AUC Score: {results[best_model_name]['auc_score']:.4f}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Training failed: {str(e)}")
+            return False
+    
+    def retrain_models(self, model_types=None):
+        """Retrain existing models with new data"""
+        logger.info("🔄 Retraining models...")
         
-        # Train models
-        print("\n" + "="*50)
-        self.train_random_forest()
+        if model_types is None:
+            model_types = ['random_forest', 'xgboost', 'logistic_regression']
         
-        print("\n" + "="*50)
-        self.train_xgboost()
+        # Check if models directory exists and backup existing models
+        models_dir = Path("models")
+        if models_dir.exists():
+            backup_dir = models_dir / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            backup_dir.mkdir(exist_ok=True)
+            
+            # Backup existing models
+            for model_file in models_dir.glob("*.joblib"):
+                if model_file.is_file():
+                    backup_file = backup_dir / model_file.name
+                    model_file.rename(backup_file)
+                    logger.info(f"📦 Backed up {model_file.name} to {backup_file}")
         
-        print("\n" + "="*50)
-        self.train_logistic_regression()
+        # Train new models
+        success = self.train_all_models()
         
-        # Evaluate models
-        print("\n" + "="*50)
-        results, best_model_name, best_model = self.evaluate_models()
+        if success:
+            logger.info("✅ Model retraining completed successfully")
+        else:
+            logger.error("❌ Model retraining failed")
         
-        # Get feature importance
-        print("\n" + "="*50)
-        self.get_feature_importance('random_forest')
-        self.get_feature_importance('xgboost')
+        return success
+    
+    def evaluate_existing_models(self):
+        """Evaluate existing trained models"""
+        logger.info("📊 Evaluating existing models...")
         
-        # Save models
-        print("\n" + "="*50)
-        self.save_models()
+        models_dir = Path("models")
+        if not models_dir.exists():
+            logger.error("❌ No models directory found")
+            return False
         
-        print(f"\n🎉 Training pipeline completed!")
-        print(f"🏆 Best model: {best_model_name}")
+        # Check for model files
+        model_files = list(models_dir.glob("*_model.joblib"))
+        if not model_files:
+            logger.error("❌ No trained models found")
+            return False
         
-        return results, best_model_name, best_model
+        try:
+            trainer = ModelTrainer()
+            trainer.load_data()
+            trainer.prepare_data()
+            
+            # Load existing models
+            import joblib
+            for model_file in model_files:
+                model_name = model_file.stem.replace('_model', '')
+                trainer.models[model_name] = joblib.load(model_file)
+                logger.info(f"📥 Loaded {model_name} model")
+            
+            # Evaluate models
+            results, best_model_name, best_model = trainer.evaluate_models()
+            
+            logger.info("✅ Model evaluation completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Model evaluation failed: {str(e)}")
+            return False
+    
+    def get_model_info(self):
+        """Get information about trained models"""
+        logger.info("ℹ️ Getting model information...")
+        
+        models_dir = Path("models")
+        if not models_dir.exists():
+            logger.warning("⚠️ No models directory found")
+            return
+        
+        # Check metadata file
+        metadata_file = models_dir / "training_metadata.json"
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            
+            logger.info("📋 Model Training Metadata:")
+            logger.info(f"  Training Date: {metadata.get('training_date', 'Unknown')}")
+            logger.info(f"  Total Samples: {metadata.get('total_samples', 'Unknown')}")
+            logger.info(f"  Training Samples: {metadata.get('training_samples', 'Unknown')}")
+            logger.info(f"  Testing Samples: {metadata.get('testing_samples', 'Unknown')}")
+            logger.info(f"  Feature Count: {metadata.get('feature_count', 'Unknown')}")
+        
+        # List available models
+        model_files = list(models_dir.glob("*_model.joblib"))
+        if model_files:
+            logger.info("🤖 Available Models:")
+            for model_file in model_files:
+                model_name = model_file.stem.replace('_model', '')
+                file_size = model_file.stat().st_size / (1024 * 1024)  # MB
+                logger.info(f"  - {model_name}: {file_size:.2f} MB")
+        else:
+            logger.warning("⚠️ No trained models found")
+
+def main():
+    """Main function with command line interface"""
+    parser = argparse.ArgumentParser(description="MLOps Model Training Script")
+    
+    parser.add_argument("--config", default="config/config.yaml",
+                       help="Path to configuration file")
+    parser.add_argument("--model", choices=['random_forest', 'xgboost', 'logistic_regression'],
+                       help="Train only specific model type")
+    parser.add_argument("--retrain", action="store_true",
+                       help="Retrain existing models")
+    parser.add_argument("--evaluate", action="store_true",
+                       help="Evaluate existing models")
+    parser.add_argument("--info", action="store_true",
+                       help="Show model information")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                       help="Enable verbose logging")
+    
+    args = parser.parse_args()
+    
+    # Set logging level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    # Initialize training script
+    training_script = TrainingScript(config_path=args.config)
+    
+    # Validate data unless just showing info
+    if not args.info and not training_script.validate_data():
+        sys.exit(1)
+    
+    success = True
+    
+    try:
+        if args.info:
+            training_script.get_model_info()
+        elif args.evaluate:
+            success = training_script.evaluate_existing_models()
+        elif args.retrain:
+            success = training_script.retrain_models()
+        elif args.model:
+            success = training_script.train_single_model(args.model)
+        else:
+            success = training_script.train_all_models()
+    
+    except KeyboardInterrupt:
+        logger.info("\n⏹️ Training interrupted by user")
+        success = False
+    except Exception as e:
+        logger.error(f"❌ Training script failed: {str(e)}")
+        success = False
+    
+    if not success:
+        sys.exit(1)
+    
+    logger.info("🎉 Training script completed successfully!")
 
 if __name__ == "__main__":
-    trainer = ModelTrainer()
-    results, best_model_name, best_model = trainer.train_all_models()
+    main()

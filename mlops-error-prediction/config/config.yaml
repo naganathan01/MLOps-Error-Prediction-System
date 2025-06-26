@@ -1,0 +1,175 @@
+# MLOps Error Prediction Configuration
+
+# Data Configuration
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  sample_dir: "data/sample"
+  
+  # Data generation parameters
+  generation:
+    n_days: 30
+    samples_per_hour: 12
+    logs_per_hour: 100
+
+# Feature Engineering
+features:
+  # Rolling window sizes
+  rolling_windows: [5, 15, 30]
+  
+  # Lag periods
+  lag_periods: [1, 2, 3, 5]
+  
+  # Anomaly detection thresholds
+  anomaly:
+    z_score_threshold: 2.0
+    iqr_multiplier: 1.5
+  
+  # Target variable
+  target_column: "failure_within_hour"
+
+# Model Configuration
+models:
+  # Random Forest
+  random_forest:
+    n_estimators: [100, 200]
+    max_depth: [10, 20, null]
+    min_samples_split: [2, 5]
+    min_samples_leaf: [1, 2]
+    class_weight: "balanced"
+    random_state: 42
+  
+  # XGBoost
+  xgboost:
+    n_estimators: [100, 200]
+    max_depth: [3, 6, 10]
+    learning_rate: [0.01, 0.1, 0.2]
+    subsample: [0.8, 1.0]
+    random_state: 42
+    eval_metric: "logloss"
+  
+  # Logistic Regression
+  logistic_regression:
+    C: [0.1, 1.0, 10.0]
+    penalty: ["l1", "l2"]
+    solver: ["liblinear"]
+    class_weight: "balanced"
+    max_iter: 1000
+    random_state: 42
+
+# Training Configuration
+training:
+  test_size: 0.2
+  random_state: 42
+  cv_folds: 3
+  scoring: "roc_auc"
+  
+  # Model selection
+  model_selection:
+    metric: "auc_score"
+    
+  # Output directories
+  model_dir: "models"
+  experiment_name: "error_prediction"
+
+# API Configuration
+api:
+  title: "MLOps Error Prediction API"
+  description: "Predict system failures before they happen"
+  version: "1.0.0"
+  host: "0.0.0.0"
+  port: 8000
+  reload: true
+  
+  # Prediction thresholds
+  thresholds:
+    high_risk: 0.7
+    medium_risk: 0.4
+    
+  # Failure time predictions
+  failure_time:
+    high_risk_minutes: 15
+    medium_risk_hours: 1
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  interval_seconds: 300
+  
+  # Model performance thresholds
+  performance:
+    min_auc_score: 0.7
+    max_drift_score: 0.3
+    
+  # Alerting
+  alerts:
+    enabled: false
+    email: "admin@company.com"
+    slack_webhook: ""
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log files
+  files:
+    app_log: "logs/app.log"
+    api_log: "logs/api.log"
+    training_log: "logs/training.log"
+    
+  # Log rotation
+  rotation:
+    max_bytes: 10485760  # 10MB
+    backup_count: 5
+
+# Database Configuration
+database:
+  type: "sqlite"
+  url: "sqlite:///./data/mlops_error_prediction.db"
+  
+  # Tables
+  tables:
+    predictions: "predictions"
+    model_performance: "model_performance"
+    system_metrics: "system_metrics"
+
+# MLflow Configuration
+mlflow:
+  tracking_uri: "file:./mlruns"
+  experiment_name: "error_prediction"
+  
+  # Auto-logging
+  autolog:
+    enabled: true
+    log_models: true
+    log_datasets: false
+
+# Security Configuration
+security:
+  secret_key: "your-secret-key-here"
+  debug: false
+  
+  # API rate limiting (requests per minute)
+  rate_limit: 100
+
+# System Configuration
+system:
+  # Metrics thresholds for recommendations
+  thresholds:
+    cpu_high: 80
+    memory_high: 85
+    disk_high: 90
+    response_time_high: 1000
+    network_latency_high: 200
+    error_count_high: 10
+    connections_high: 500
+    
+  # Default values for missing metrics
+  defaults:
+    cpu_mean: 40
+    cpu_std: 20
+    memory_mean: 50
+    memory_std: 25
+    response_time_mean: 300
+    response_time_std: 100
