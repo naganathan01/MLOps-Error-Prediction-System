@@ -1,21 +1,14 @@
 """
-Complete MLOps pipeline runner.
-Executes the full data generation, feature engineering, and model training pipeline.
+Complete enhanced pipeline runner that generates better data, engineers features, 
+trains models, and starts the improved prediction API.
 """
 
 import sys
+import subprocess
 import logging
-import argparse
 from pathlib import Path
 from datetime import datetime
-import yaml
-
-# Add src to Python path
-sys.path.append(str(Path(__file__).parent.parent))
-
-from src.data.data_generator import SystemDataGenerator
-from src.features.feature_engineering import FeatureEngineer
-from src.models.training import ModelTrainer
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -24,280 +17,297 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class MLOpsPipeline:
-    def __init__(self, config_path="config/config.yaml"):
-        self.config_path = Path(config_path)
-        self.config = self.load_config()
-        self.start_time = datetime.now()
-        
-    def load_config(self):
-        """Load configuration from YAML file"""
-        try:
-            with open(self.config_path, 'r') as f:
-                config = yaml.safe_load(f)
-            logger.info(f"✅ Loaded configuration from {self.config_path}")
-            return config
-        except FileNotFoundError:
-            logger.warning(f"⚠️ Config file not found: {self.config_path}, using defaults")
-            return self.get_default_config()
-        except Exception as e:
-            logger.error(f"❌ Failed to load config: {str(e)}")
-            return self.get_default_config()
+def run_enhanced_pipeline():
+    """Run the complete enhanced MLOps pipeline"""
     
-    def get_default_config(self):
-        """Get default configuration"""
-        return {
-            'data': {
-                'generation': {
-                    'n_days': 30,
-                    'samples_per_hour': 12,
-                    'logs_per_hour': 100
-                }
-            },
-            'features': {
-                'rolling_windows': [5, 15, 30],
-                'lag_periods': [1, 2, 3, 5]
-            },
-            'training': {
-                'test_size': 0.2,
-                'random_state': 42
+    print("🚀 Starting Enhanced MLOps Error Prediction Pipeline")
+    print("=" * 80)
+    
+    start_time = datetime.now()
+    
+    try:
+        # Step 1: Generate Enhanced Data
+        print("\n📊 STEP 1: GENERATING ENHANCED DATA")
+        print("-" * 50)
+        
+        from src.data.data_generator import EnhancedSystemDataGenerator
+        
+        generator = EnhancedSystemDataGenerator()
+        metrics_df, logs_df = generator.generate_all_data(n_days=30, failure_rate=0.35)
+        
+        print(f"✅ Generated {len(metrics_df)} metrics and {len(logs_df)} logs")
+        print(f"   Failure rate: {metrics_df['failure_within_hour'].mean():.2%}")
+        
+        # Step 2: Enhanced Feature Engineering
+        print("\n🔧 STEP 2: ENHANCED FEATURE ENGINEERING")
+        print("-" * 50)
+        
+        from src.features.feature_engineering import EnhancedFeatureEngineer
+        
+        engineer = EnhancedFeatureEngineer()
+        features_df = engineer.process_enhanced_features()
+        
+        print(f"✅ Created {len(features_df.columns)} enhanced features")
+        print(f"   Dataset shape: {features_df.shape}")
+        
+        # Step 3: Enhanced Model Training
+        print("\n🤖 STEP 3: ENHANCED MODEL TRAINING")
+        print("-" * 50)
+        
+        from src.models.training import EnhancedModelTrainer
+        
+        trainer = EnhancedModelTrainer()
+        results, best_model_name, best_model = trainer.train_all_enhanced_models(use_search=True)
+        
+        if not results:
+            logger.error("❌ Model training failed")
+            return False
+        
+        print(f"✅ Training completed - Best model: {best_model_name}")
+        print(f"   Best AUC: {results[best_model_name]['auc_score']:.4f}")
+        
+        # Step 4: Validate Models
+        print("\n🔍 STEP 4: MODEL VALIDATION")
+        print("-" * 50)
+        
+        validation_passed = validate_models(results)
+        
+        if not validation_passed:
+            logger.warning("⚠️ Model validation has concerns but continuing...")
+        
+        # Step 5: Start Enhanced API
+        print("\n🌐 STEP 5: STARTING ENHANCED API SERVER")
+        print("-" * 50)
+        
+        print("Starting enhanced prediction API on http://localhost:8080")
+        print("API Documentation: http://localhost:8080/docs")
+        
+        # Calculate total time
+        end_time = datetime.now()
+        duration = end_time - start_time
+        
+        print("\n" + "=" * 80)
+        print("🎉 ENHANCED PIPELINE COMPLETED SUCCESSFULLY!")
+        print("=" * 80)
+        print(f"⏱️  Total Duration: {duration}")
+        print(f"🏆 Best Model: {best_model_name}")
+        print(f"📊 Performance: {results[best_model_name]['auc_score']:.4f} AUC")
+        
+        # Print next steps
+        print_next_steps()
+        
+        # Start the API server
+        start_api_server()
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Pipeline failed: {str(e)}")
+        return False
+
+def validate_models(results):
+    """Validate that models meet minimum performance requirements"""
+    print("Validating model performance...")
+    
+    validation_passed = True
+    min_auc_threshold = 0.75
+    min_f1_threshold = 0.60
+    
+    for model_name, metrics in results.items():
+        auc = metrics.get('auc_score', 0)
+        f1 = metrics.get('f1_score', 0)
+        
+        print(f"   {model_name}:")
+        print(f"     AUC: {auc:.4f} {'✅' if auc >= min_auc_threshold else '❌'}")
+        print(f"     F1:  {f1:.4f} {'✅' if f1 >= min_f1_threshold else '❌'}")
+        
+        if auc < min_auc_threshold or f1 < min_f1_threshold:
+            validation_passed = False
+            print(f"     ⚠️ {model_name} below minimum thresholds")
+    
+    if validation_passed:
+        print("✅ All models meet performance requirements")
+    else:
+        print("⚠️ Some models below performance thresholds")
+        print("   Consider: more data, feature engineering, or hyperparameter tuning")
+    
+    return validation_passed
+
+def print_next_steps():
+    """Print next steps and usage examples"""
+    print("\n📋 NEXT STEPS:")
+    print("1. Test the enhanced API:")
+    print("   curl -X POST http://localhost:8080/predict \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -d '{")
+    print('       "cpu_usage": 85,')
+    print('       "memory_usage": 90,')
+    print('       "disk_usage": 45,')
+    print('       "network_latency_ms": 120,')
+    print('       "error_count": 5,')
+    print('       "response_time_ms": 800,')
+    print('       "active_connections": 150')
+    print("     }'")
+    
+    print("\n2. View API documentation:")
+    print("   http://localhost:8080/docs")
+    
+    print("\n3. Monitor model performance:")
+    print("   Check logs and metrics in the API responses")
+    
+    print("\n4. Test different scenarios:")
+    print("   - Low risk: cpu_usage=30, memory_usage=40, error_count=0")
+    print("   - Medium risk: cpu_usage=75, memory_usage=80, error_count=3")
+    print("   - High risk: cpu_usage=95, memory_usage=95, error_count=15")
+    print("   - Critical: cpu_usage=98, memory_usage=98, error_count=25")
+
+def start_api_server():
+    """Start the enhanced API server"""
+    try:
+        import uvicorn
+        from src.models.prediction import app
+        
+        print("\n🌐 Starting Enhanced API Server...")
+        print("   Server: http://localhost:8080")
+        print("   Docs: http://localhost:8080/docs")
+        print("   Health: http://localhost:8080/health")
+        print("\nPress Ctrl+C to stop the server")
+        
+        # Start the server
+        uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")
+        
+    except KeyboardInterrupt:
+        print("\n⏹️  Server stopped by user")
+    except Exception as e:
+        logger.error(f"❌ Failed to start API server: {str(e)}")
+        print("\n🔧 Manual start command:")
+        print("   python -m uvicorn src.models.prediction:app --host 0.0.0.0 --port 8080")
+
+def test_api_predictions():
+    """Test the API with various scenarios"""
+    import requests
+    import json
+    
+    print("\n🧪 TESTING API PREDICTIONS")
+    print("-" * 50)
+    
+    test_scenarios = [
+        {
+            "name": "Low Risk Scenario",
+            "data": {
+                "cpu_usage": 30,
+                "memory_usage": 40,
+                "disk_usage": 25,
+                "network_latency_ms": 50,
+                "error_count": 0,
+                "response_time_ms": 200,
+                "active_connections": 25
+            }
+        },
+        {
+            "name": "Medium Risk Scenario", 
+            "data": {
+                "cpu_usage": 75,
+                "memory_usage": 80,
+                "disk_usage": 45,
+                "network_latency_ms": 120,
+                "error_count": 3,
+                "response_time_ms": 600,
+                "active_connections": 100
+            }
+        },
+        {
+            "name": "High Risk Scenario",
+            "data": {
+                "cpu_usage": 95,
+                "memory_usage": 92,
+                "disk_usage": 88,
+                "network_latency_ms": 300,
+                "error_count": 12,
+                "response_time_ms": 1500,
+                "active_connections": 250
+            }
+        },
+        {
+            "name": "Critical Risk Scenario",
+            "data": {
+                "cpu_usage": 98,
+                "memory_usage": 97,
+                "disk_usage": 96,
+                "network_latency_ms": 800,
+                "error_count": 25,
+                "response_time_ms": 3000,
+                "active_connections": 500
             }
         }
+    ]
     
-    def run_data_generation(self, n_days=None):
-        """Run data generation step"""
-        logger.info("🚀 Starting data generation...")
-        
+    for scenario in test_scenarios:
         try:
-            # Get parameters from config
-            if n_days is None:
-                n_days = self.config.get('data', {}).get('generation', {}).get('n_days', 30)
+            response = requests.post(
+                "http://localhost:8080/predict",
+                json=scenario["data"],
+                timeout=10
+            )
             
-            generator = SystemDataGenerator()
-            metrics_df, logs_df = generator.generate_all_data(n_days=n_days)
-            
-            logger.info(f"✅ Data generation completed: {len(metrics_df)} metrics, {len(logs_df)} logs")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Data generation failed: {str(e)}")
-            return False
-    
-    def run_feature_engineering(self):
-        """Run feature engineering step"""
-        logger.info("🔧 Starting feature engineering...")
-        
-        try:
-            engineer = FeatureEngineer()
-            df = engineer.process_features()
-            
-            logger.info(f"✅ Feature engineering completed: {len(df)} samples, {len(df.columns)} features")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Feature engineering failed: {str(e)}")
-            return False
-    
-    def run_model_training(self):
-        """Run model training step"""
-        logger.info("🤖 Starting model training...")
-        
-        try:
-            trainer = ModelTrainer()
-            results, best_model_name, best_model = trainer.train_all_models()
-            
-            logger.info(f"✅ Model training completed: Best model is {best_model_name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Model training failed: {str(e)}")
-            return False
-    
-    def validate_prerequisites(self):
-        """Validate that all prerequisites are met"""
-        logger.info("🔍 Validating prerequisites...")
-        
-        # Check required directories
-        required_dirs = ["data", "models", "logs"]
-        for dir_name in required_dirs:
-            dir_path = Path(dir_name)
-            if not dir_path.exists():
-                logger.error(f"❌ Required directory missing: {dir_path}")
-                return False
-            
-        # Check required files
-        required_files = [
-            "src/data/data_generator.py",
-            "src/features/feature_engineering.py", 
-            "src/models/training.py"
-        ]
-        
-        for file_path in required_files:
-            if not Path(file_path).exists():
-                logger.error(f"❌ Required file missing: {file_path}")
-                return False
-        
-        logger.info("✅ Prerequisites validated")
-        return True
-    
-    def run_full_pipeline(self, n_days=None, skip_data=False, skip_features=False, skip_training=False):
-        """Run the complete MLOps pipeline"""
-        logger.info("🚀 Starting MLOps Error Prediction Pipeline...")
-        logger.info(f"⏰ Pipeline started at: {self.start_time}")
-        
-        # Validate prerequisites
-        if not self.validate_prerequisites():
-            logger.error("❌ Prerequisites validation failed")
-            return False
-        
-        success_steps = []
-        failed_steps = []
-        
-        try:
-            # Step 1: Data Generation
-            if not skip_data:
-                logger.info("\n" + "="*60)
-                logger.info("📊 STEP 1: DATA GENERATION")
-                logger.info("="*60)
-                
-                if self.run_data_generation(n_days):
-                    success_steps.append("Data Generation")
-                else:
-                    failed_steps.append("Data Generation")
-                    if not self.check_existing_data():
-                        logger.error("❌ No existing data found, cannot continue")
-                        return False
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ {scenario['name']}:")
+                print(f"   Risk Level: {result['failure_risk']}")
+                print(f"   Probability: {result['failure_probability']:.4f}")
+                print(f"   Health Score: {result['system_health_score']:.1f}")
+                print(f"   Confidence: {result['confidence']:.3f}")
+                print(f"   Key Recommendations: {len(result['recommendations'])}")
             else:
-                logger.info("⏭️ Skipping data generation")
+                print(f"❌ {scenario['name']}: HTTP {response.status_code}")
                 
-            # Step 2: Feature Engineering  
-            if not skip_features:
-                logger.info("\n" + "="*60)
-                logger.info("🔧 STEP 2: FEATURE ENGINEERING")
-                logger.info("="*60)
-                
-                if self.run_feature_engineering():
-                    success_steps.append("Feature Engineering")
-                else:
-                    failed_steps.append("Feature Engineering")
-                    if not self.check_existing_features():
-                        logger.error("❌ No existing features found, cannot continue")
-                        return False
-            else:
-                logger.info("⏭️ Skipping feature engineering")
-                
-            # Step 3: Model Training
-            if not skip_training:
-                logger.info("\n" + "="*60)
-                logger.info("🤖 STEP 3: MODEL TRAINING")
-                logger.info("="*60)
-                
-                if self.run_model_training():
-                    success_steps.append("Model Training")
-                else:
-                    failed_steps.append("Model Training")
-            else:
-                logger.info("⏭️ Skipping model training")
-            
-            # Pipeline Summary
-            end_time = datetime.now()
-            duration = end_time - self.start_time
-            
-            logger.info("\n" + "="*60)
-            logger.info("📋 PIPELINE SUMMARY")
-            logger.info("="*60)
-            logger.info(f"⏰ Started: {self.start_time}")
-            logger.info(f"⏰ Finished: {end_time}")
-            logger.info(f"⏱️ Duration: {duration}")
-            logger.info(f"✅ Successful steps: {', '.join(success_steps) if success_steps else 'None'}")
-            logger.info(f"❌ Failed steps: {', '.join(failed_steps) if failed_steps else 'None'}")
-            
-            if failed_steps:
-                logger.warning(f"⚠️ Pipeline completed with {len(failed_steps)} failed steps")
-                return False
-            else:
-                logger.info("🎉 Pipeline completed successfully!")
-                self.print_next_steps()
-                return True
-                
-        except KeyboardInterrupt:
-            logger.info("\n⏹️ Pipeline interrupted by user")
-            return False
+        except requests.exceptions.RequestException as e:
+            print(f"❌ {scenario['name']}: Connection error - {str(e)}")
         except Exception as e:
-            logger.error(f"❌ Pipeline failed with unexpected error: {str(e)}")
-            return False
-    
-    def check_existing_data(self):
-        """Check if raw data exists"""
-        data_files = [
-            Path("data/raw/system_metrics.csv"),
-            Path("data/raw/application_logs.csv")
-        ]
-        return all(f.exists() for f in data_files)
-    
-    def check_existing_features(self):
-        """Check if processed features exist"""
-        return Path("data/processed/features.csv").exists()
-    
-    def print_next_steps(self):
-        """Print next steps after successful pipeline completion"""
-        print("\n" + "="*60)
-        print("🎉 MLOps Pipeline Completed Successfully!")
-        print("="*60)
-        print("\n📋 Next Steps:")
-        print("1. Start the API server:")
-        print("   uvicorn src.api.app:app --reload")
-        print("\n2. Test the API:")
-        print("   curl -X POST http://localhost:8000/predict \\")
-        print("     -H 'Content-Type: application/json' \\")
-        print("     -d '{\"cpu_usage\": 85, \"memory_usage\": 90, \"error_count\": 3}'")
-        print("\n3. View API documentation:")
-        print("   http://localhost:8000/docs")
-        print("\n4. Check MLflow experiments:")
-        print("   mlflow ui")
-        print("\n5. Run tests:")
-        print("   pytest tests/")
-        print("\n🔧 Available commands:")
-        print("   make api    # Start API server")
-        print("   make test   # Run tests")
-        print("   make clean  # Clean generated files")
-        print("="*60)
+            print(f"❌ {scenario['name']}: Error - {str(e)}")
 
 def main():
-    """Main function with command line interface"""
-    parser = argparse.ArgumentParser(description="MLOps Error Prediction Pipeline")
+    """Main function to run the complete pipeline"""
     
-    parser.add_argument("--config", default="config/config.yaml", 
-                       help="Path to configuration file")
-    parser.add_argument("--days", type=int, default=None,
-                       help="Number of days of data to generate")
-    parser.add_argument("--skip-data", action="store_true",
-                       help="Skip data generation step")
-    parser.add_argument("--skip-features", action="store_true", 
-                       help="Skip feature engineering step")
-    parser.add_argument("--skip-training", action="store_true",
-                       help="Skip model training step")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                       help="Enable verbose logging")
+    # Check dependencies
+    required_packages = ['pandas', 'numpy', 'scikit-learn', 'fastapi', 'uvicorn']
+    missing_packages = []
     
-    args = parser.parse_args()
+    for package in required_packages:
+        try:
+            __import__(package)
+        except ImportError:
+            missing_packages.append(package)
     
-    # Set logging level
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+    if missing_packages:
+        print(f"❌ Missing required packages: {missing_packages}")
+        print("Please install with: pip install -r requirements.txt")
+        return False
     
-    # Initialize and run pipeline
-    pipeline = MLOpsPipeline(config_path=args.config)
+    # Create necessary directories
+    dirs_to_create = ["data/raw", "data/processed", "models", "logs"]
+    for dir_path in dirs_to_create:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
     
-    success = pipeline.run_full_pipeline(
-        n_days=args.days,
-        skip_data=args.skip_data,
-        skip_features=args.skip_features,
-        skip_training=args.skip_training
-    )
+    # Run the enhanced pipeline
+    success = run_enhanced_pipeline()
     
-    if not success:
-        sys.exit(1)
+    if success:
+        print("\n🎊 Pipeline completed successfully!")
+        
+        # Optionally test the API
+        test_choice = input("\nWould you like to test the API with sample predictions? (y/n): ")
+        if test_choice.lower() == 'y':
+            import time
+            print("Waiting 3 seconds for server to fully start...")
+            time.sleep(3)
+            test_api_predictions()
+    else:
+        print("\n❌ Pipeline failed!")
+        return False
+    
+    return True
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    sys.exit(0 if success else 1)

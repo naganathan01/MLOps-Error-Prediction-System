@@ -1,0 +1,14 @@
+{
+  "handle_missing": true,
+  "missing_strategy": "adaptive",
+  "handle_outliers": true,
+  "outlier_method": "iqr",
+  "outlier_threshold": 1.5,
+  "normalize": true,
+  "normalization_method": "standard",
+  "create_derived": true,
+  "remove_low_variance": true,
+  "variance_threshold": 0.01,
+  "handle_imbalance": true,
+  "balance_method": "oversample"
+}
