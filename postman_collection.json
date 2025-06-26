@@ -1,0 +1,979 @@
+{
+  "info": {
+    "name": "MLOps Error Prediction API",
+    "description": "Complete API testing collection for the MLOps Error Prediction System. Tests all endpoints with various scenarios including high risk, medium risk, and low risk predictions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "description": "Base URL for the API (change port if needed)"
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set timestamp for requests",
+          "pm.globals.set(\"timestamp\", new Date().toISOString());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "Root Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Test the root endpoint to verify API is running"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has required fields\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "    pm.expect(jsonData).to.have.property('version');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData.status).to.eql('running');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check API health and model loading status"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health check response structure\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('timestamp');",
+                  "    pm.expect(jsonData).to.have.property('models_loaded');",
+                  "    pm.expect(jsonData).to.have.property('uptime');",
+                  "});",
+                  "",
+                  "pm.test(\"System is healthy\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('healthy');",
+                  "});",
+                  "",
+                  "pm.test(\"Models are loaded\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.models_loaded).to.be.an('array');",
+                  "    pm.expect(jsonData.models_loaded.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Models Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/models/info",
+              "host": ["{{base_url}}"],
+              "path": ["models", "info"]
+            },
+            "description": "Get information about loaded models"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Models info structure\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('loaded_models');",
+                  "    pm.expect(jsonData).to.have.property('feature_count');",
+                  "    pm.expect(jsonData).to.have.property('metadata');",
+                  "});",
+                  "",
+                  "pm.test(\"Feature count is reasonable\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.feature_count).to.be.above(50);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Feature List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/models/features",
+              "host": ["{{base_url}}"],
+              "path": ["models", "features"]
+            },
+            "description": "Get list of features used by the model"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Features response structure\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('features');",
+                  "    pm.expect(jsonData).to.have.property('feature_count');",
+                  "    pm.expect(jsonData.features).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Health checks and API information endpoints"
+    },
+    {
+      "name": "Predictions",
+      "item": [
+        {
+          "name": "HIGH Risk Prediction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 95.0,\n  \"memory_usage\": 98.0,\n  \"disk_usage\": 85.0,\n  \"network_latency_ms\": 300.0,\n  \"error_count\": 15,\n  \"response_time_ms\": 2000.0,\n  \"active_connections\": 200\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test prediction with high system stress (should return HIGH risk)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Prediction response structure\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('failure_probability');",
+                  "    pm.expect(jsonData).to.have.property('failure_risk');",
+                  "    pm.expect(jsonData).to.have.property('recommendations');",
+                  "    pm.expect(jsonData).to.have.property('model_used');",
+                  "    pm.expect(jsonData).to.have.property('confidence');",
+                  "    pm.expect(jsonData).to.have.property('timestamp');",
+                  "});",
+                  "",
+                  "pm.test(\"Failure probability is valid\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.failure_probability).to.be.at.least(0);",
+                  "    pm.expect(jsonData.failure_probability).to.be.at.most(1);",
+                  "});",
+                  "",
+                  "pm.test(\"Risk level is appropriate for high stress\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(['HIGH', 'MEDIUM']).to.include(jsonData.failure_risk);",
+                  "});",
+                  "",
+                  "pm.test(\"Recommendations are provided\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.recommendations).to.be.an('array');",
+                  "    pm.expect(jsonData.recommendations.length).to.be.above(0);",
+                  "});",
+                  "",
+                  "pm.test(\"Confidence is reasonable\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.confidence).to.be.at.least(0.5);",
+                  "    pm.expect(jsonData.confidence).to.be.at.most(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "MEDIUM Risk Prediction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 75.0,\n  \"memory_usage\": 80.0,\n  \"disk_usage\": 45.0,\n  \"network_latency_ms\": 100.0,\n  \"error_count\": 2,\n  \"response_time_ms\": 350.0,\n  \"active_connections\": 50\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test prediction with moderate system stress (should return MEDIUM risk)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Risk level is MEDIUM or reasonable\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(['LOW', 'MEDIUM', 'HIGH']).to.include(jsonData.failure_risk);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is fast\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LOW Risk Prediction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 25.0,\n  \"memory_usage\": 30.0,\n  \"disk_usage\": 20.0,\n  \"network_latency_ms\": 30.0,\n  \"error_count\": 0,\n  \"response_time_ms\": 150.0,\n  \"active_connections\": 20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test prediction with low system stress (should return LOW risk)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Low stress should result in low failure probability\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.failure_probability).to.be.below(0.5);",
+                  "});",
+                  "",
+                  "pm.test(\"Risk level is appropriate for low stress\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(['LOW', 'MEDIUM']).to.include(jsonData.failure_risk);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Prediction with Optional Fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 60.0,\n  \"memory_usage\": 65.0,\n  \"disk_usage\": 40.0,\n  \"network_latency_ms\": 80.0,\n  \"error_count\": 1,\n  \"response_time_ms\": 280.0,\n  \"active_connections\": 40,\n  \"hour\": 14,\n  \"day_of_week\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test prediction with optional time-based fields included"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Optional fields are handled correctly\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('failure_probability');",
+                  "    pm.expect(jsonData).to.have.property('failure_risk');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Batch Prediction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"cpu_usage\": 85.0,\n    \"memory_usage\": 90.0,\n    \"disk_usage\": 45.0,\n    \"network_latency_ms\": 120.0,\n    \"error_count\": 3,\n    \"response_time_ms\": 450.0,\n    \"active_connections\": 75\n  },\n  {\n    \"cpu_usage\": 30.0,\n    \"memory_usage\": 40.0,\n    \"disk_usage\": 25.0,\n    \"network_latency_ms\": 50.0,\n    \"error_count\": 0,\n    \"response_time_ms\": 200.0,\n    \"active_connections\": 25\n  },\n  {\n    \"cpu_usage\": 60.0,\n    \"memory_usage\": 70.0,\n    \"disk_usage\": 35.0,\n    \"network_latency_ms\": 90.0,\n    \"error_count\": 1,\n    \"response_time_ms\": 300.0,\n    \"active_connections\": 45\n  }\n]"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict/batch",
+              "host": ["{{base_url}}"],
+              "path": ["predict", "batch"]
+            },
+            "description": "Test batch prediction with multiple system metrics"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Batch prediction response structure\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('predictions');",
+                  "    pm.expect(jsonData.predictions).to.be.an('array');",
+                  "    pm.expect(jsonData.predictions).to.have.lengthOf(3);",
+                  "});",
+                  "",
+                  "pm.test(\"Each prediction has required fields\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    jsonData.predictions.forEach(function(prediction) {",
+                  "        pm.expect(prediction).to.have.property('failure_probability');",
+                  "        pm.expect(prediction).to.have.property('failure_risk');",
+                  "        pm.expect(prediction).to.have.property('recommendations');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Prediction endpoints testing various scenarios"
+    },
+    {
+      "name": "Error Handling",
+      "item": [
+        {
+          "name": "Invalid Input - Missing Fields",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 85.0,\n  \"memory_usage\": 90.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API response to missing required fields"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422 (Validation Error)\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test(\"Error response has detail\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Input - Out of Range",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 150.0,\n  \"memory_usage\": -10.0,\n  \"disk_usage\": 45.0,\n  \"network_latency_ms\": 120.0,\n  \"error_count\": 3,\n  \"response_time_ms\": 450.0,\n  \"active_connections\": 75\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API response to out-of-range values"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422 (Validation Error)\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test(\"Error response has detail\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Input - Wrong Data Types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": \"not_a_number\",\n  \"memory_usage\": 90.0,\n  \"disk_usage\": 45.0,\n  \"network_latency_ms\": 120.0,\n  \"error_count\": 3,\n  \"response_time_ms\": 450.0,\n  \"active_connections\": 75\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API response to invalid data types"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422 (Validation Error)\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test(\"Error response has detail\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ invalid json }"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API response to malformed JSON"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422 (Validation Error)\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Non-existent Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/nonexistent",
+              "host": ["{{base_url}}"],
+              "path": ["nonexistent"]
+            },
+            "description": "Test 404 error for non-existent endpoint"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404 (Not Found)\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Error handling and validation testing"
+    },
+    {
+      "name": "Performance Tests",
+      "item": [
+        {
+          "name": "Response Time Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 60.0,\n  \"memory_usage\": 65.0,\n  \"disk_usage\": 40.0,\n  \"network_latency_ms\": 80.0,\n  \"error_count\": 1,\n  \"response_time_ms\": 280.0,\n  \"active_connections\": 40\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API response time performance"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is under 5 seconds\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is under 1 second (ideal)\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+                  "});",
+                  "",
+                  "console.log(\"Response time: \" + pm.response.responseTime + \"ms\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Concurrent Requests Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": {{$randomInt}},\n  \"memory_usage\": {{$randomInt}},\n  \"disk_usage\": {{$randomInt}},\n  \"network_latency_ms\": {{$randomInt}},\n  \"error_count\": {{$randomInt}},\n  \"response_time_ms\": {{$randomInt}},\n  \"active_connections\": {{$randomInt}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Test API with random values for load testing"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 or 422 (validation)\", function () {",
+                  "    pm.expect([200, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is reasonable under load\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Performance and load testing"
+    },
+    {
+      "name": "Real-world Scenarios",
+      "item": [
+        {
+          "name": "Database Server Overload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 92.0,\n  \"memory_usage\": 96.0,\n  \"disk_usage\": 78.0,\n  \"network_latency_ms\": 180.0,\n  \"error_count\": 8,\n  \"response_time_ms\": 1200.0,\n  \"active_connections\": 150\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Simulate database server under heavy load scenario"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"High load scenario detected\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.failure_risk).to.be.oneOf(['MEDIUM', 'HIGH']);",
+                  "});",
+                  "",
+                  "pm.test(\"Recommendations include resource scaling\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const recommendations = jsonData.recommendations.join(' ').toLowerCase();",
+                  "    pm.expect(recommendations).to.include.oneOf(['cpu', 'memory', 'scale', 'optimize']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Web Server Normal Operation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 45.0,\n  \"memory_usage\": 55.0,\n  \"disk_usage\": 35.0,\n  \"network_latency_ms\": 60.0,\n  \"error_count\": 0,\n  \"response_time_ms\": 220.0,\n  \"active_connections\": 35\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Simulate normal web server operation"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Normal operation shows low risk\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.failure_risk).to.be.oneOf(['LOW', 'MEDIUM']);",
+                  "});",
+                  "",
+                  "pm.test(\"Healthy system recommendation\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const recommendations = jsonData.recommendations.join(' ').toLowerCase();",
+                  "    pm.expect(recommendations).to.include.oneOf(['healthy', 'continue', 'monitoring']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Microservice Memory Leak",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 65.0,\n  \"memory_usage\": 94.0,\n  \"disk_usage\": 42.0,\n  \"network_latency_ms\": 85.0,\n  \"error_count\": 3,\n  \"response_time_ms\": 380.0,\n  \"active_connections\": 60\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Simulate microservice with memory leak"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Memory issue detected\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const recommendations = jsonData.recommendations.join(' ').toLowerCase();",
+                  "    pm.expect(recommendations).to.include.oneOf(['memory', 'leak', 'allocation']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Peak Traffic Hour",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 78.0,\n  \"memory_usage\": 72.0,\n  \"disk_usage\": 50.0,\n  \"network_latency_ms\": 110.0,\n  \"error_count\": 1,\n  \"response_time_ms\": 420.0,\n  \"active_connections\": 85,\n  \"hour\": 12,\n  \"day_of_week\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Simulate system during peak business hours"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Peak traffic handled appropriately\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(['LOW', 'MEDIUM', 'HIGH']).to.include(jsonData.failure_risk);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Network Connectivity Issues",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_usage\": 55.0,\n  \"memory_usage\": 60.0,\n  \"disk_usage\": 38.0,\n  \"network_latency_ms\": 450.0,\n  \"error_count\": 5,\n  \"response_time_ms\": 850.0,\n  \"active_connections\": 45\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/predict",
+              "host": ["{{base_url}}"],
+              "path": ["predict"]
+            },
+            "description": "Simulate network connectivity issues"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Network issues detected in recommendations\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    const recommendations = jsonData.recommendations.join(' ').toLowerCase();",
+                  "    pm.expect(recommendations).to.include.oneOf(['network', 'latency', 'connectivity']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Real-world system scenarios and use cases"
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test for all requests",
+          "pm.test(\"Response is JSON\", function () {",
+          "    pm.response.to.be.json;",
+          "});",
+          "",
+          "pm.test(\"Response time is acceptable\", function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});"
+        ]
+      }
+    }
+  ]
+}
