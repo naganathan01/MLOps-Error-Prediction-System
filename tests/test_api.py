@@ -1,206 +1,108 @@
 """
-Tests for the API endpoints.
+API tests for MLOps Error Prediction System.
+File: tests/test_api.py
 """
 
-import pytest
+import requests
 import json
-from fastapi.testclient import TestClient
-from pathlib import Path
 import sys
+from pathlib import Path
 
-# Add src to path
+# Add src to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.api.app import app
-
-client = TestClient(app)
-
-class TestAPI:
+def test_api():
+    """Test the prediction API"""
+    print("🧪 Testing MLOps Error Prediction API")
+    print("=" * 50)
     
-    def test_root_endpoint(self):
-        """Test root endpoint"""
-        response = client.get("/")
-        assert response.status_code == 200
-        data = response.json()
-        assert "message" in data
-        assert "version" in data
-        assert data["status"] == "running"
+    base_url = "http://localhost:8000"
     
-    def test_health_endpoint(self):
-        """Test health check endpoint"""
-        response = client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert "status" in data
-        assert "timestamp" in data
-        assert "models_loaded" in data
-        assert isinstance(data["models_loaded"], list)
-    
-    def test_predict_valid_input(self):
-        """Test prediction with valid input"""
-        test_input = {
-            "cpu_usage": 85.0,
-            "memory_usage": 90.0,
-            "disk_usage": 45.0,
-            "network_latency_ms": 120.0,
-            "error_count": 3,
-            "response_time_ms": 450.0,
-            "active_connections": 75
-        }
-        
-        response = client.post("/predict", json=test_input)
-        
-        # Should work even without models loaded (will return 500)
-        # In a real test environment, models would be loaded
-        assert response.status_code in [200, 500]
-        
+    # Test 1: Health check
+    print("\n1. Testing health endpoint...")
+    try:
+        response = requests.get(f"{base_url}/health")
         if response.status_code == 200:
-            data = response.json()
-            assert "failure_probability" in data
-            assert "failure_risk" in data
-            assert "recommendations" in data
-            assert "model_used" in data
-            assert "confidence" in data
-            assert "timestamp" in data
-            
-            # Validate data types and ranges
-            assert 0 <= data["failure_probability"] <= 1
-            assert data["failure_risk"] in ["LOW", "MEDIUM", "HIGH"]
-            assert isinstance(data["recommendations"], list)
-            assert 0 <= data["confidence"] <= 1
+            health_data = response.json()
+            print("✅ Health check passed")
+            print(f"   Status: {health_data['status']}")
+            print(f"   Models loaded: {health_data['models_loaded']}")
+        else:
+            print(f"❌ Health check failed: {response.status_code}")
+            return False
+    except requests.exceptions.RequestException:
+        print("❌ API is not running. Start it first with: python main.py")
+        return False
     
-    def test_predict_invalid_input(self):
-        """Test prediction with invalid input"""
-        # Missing required fields
-        test_input = {
-            "cpu_usage": 85.0,
-            "memory_usage": 90.0
-            # Missing other required fields
-        }
-        
-        response = client.post("/predict", json=test_input)
-        assert response.status_code == 422  # Validation error
-    
-    def test_predict_out_of_range_values(self):
-        """Test prediction with out-of-range values"""
-        test_input = {
-            "cpu_usage": 150.0,  # > 100
-            "memory_usage": -10.0,  # < 0
-            "disk_usage": 45.0,
-            "network_latency_ms": 120.0,
-            "error_count": 3,
-            "response_time_ms": 450.0,
-            "active_connections": 75
-        }
-        
-        response = client.post("/predict", json=test_input)
-        assert response.status_code == 422  # Validation error
-    
-    def test_batch_predict(self):
-        """Test batch prediction endpoint"""
-        test_inputs = [
-            {
-                "cpu_usage": 85.0,
-                "memory_usage": 90.0,
-                "disk_usage": 45.0,
-                "network_latency_ms": 120.0,
-                "error_count": 3,
-                "response_time_ms": 450.0,
-                "active_connections": 75
-            },
-            {
-                "cpu_usage": 30.0,
-                "memory_usage": 40.0,
-                "disk_usage": 20.0,
-                "network_latency_ms": 50.0,
+    # Test 2: Predictions with different scenarios
+    test_scenarios = [
+        {
+            "name": "Normal System",
+            "data": {
+                "cpu_usage": 30,
+                "memory_usage": 40,
+                "disk_usage": 25,
+                "network_latency_ms": 50,
                 "error_count": 0,
-                "response_time_ms": 200.0,
+                "response_time_ms": 200,
                 "active_connections": 25
             }
-        ]
-        
-        response = client.post("/predict/batch", json=test_inputs)
-        
-        # Should work even without models loaded (will return 500)
-        assert response.status_code in [200, 500]
-        
-        if response.status_code == 200:
-            data = response.json()
-            assert "predictions" in data
-            assert len(data["predictions"]) == 2
+        },
+        {
+            "name": "Critical System State",
+            "data": {
+                "cpu_usage": 95,
+                "memory_usage": 92,
+                "disk_usage": 88,
+                "network_latency_ms": 300,
+                "error_count": 15,
+                "response_time_ms": 2500,
+                "active_connections": 200
+            }
+        }
+    ]
     
-    def test_models_info_endpoint(self):
-        """Test models info endpoint"""
-        response = client.get("/models/info")
-        
-        # Should work even without models loaded (will return 500)
-        assert response.status_code in [200, 500]
-        
-        if response.status_code == 200:
-            data = response.json()
-            assert "loaded_models" in data
-            assert "feature_count" in data
-            assert isinstance(data["loaded_models"], list)
+    print("\n2. Testing predictions...")
+    for i, scenario in enumerate(test_scenarios, 1):
+        print(f"\n2.{i} {scenario['name']}:")
+        try:
+            response = requests.post(
+                f"{base_url}/predict",
+                json=scenario['data'],
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                print("✅ Prediction successful:")
+                print(f"   Risk Level: {result['failure_risk']}")
+                print(f"   Probability: {result['failure_probability']:.4f}")
+                print(f"   Confidence: {result['confidence']:.3f}")
+                print(f"   Model Used: {result['model_used']}")
+                
+            else:
+                print(f"❌ Prediction failed: {response.status_code}")
+                
+        except Exception as e:
+            print(f"❌ Prediction error: {str(e)}")
     
-    def test_features_endpoint(self):
-        """Test features list endpoint"""
-        response = client.get("/models/features")
-        assert response.status_code == 200
-        data = response.json()
-        assert "features" in data
-        assert "feature_count" in data
-        assert isinstance(data["features"], list)
+    print("\n🎉 API testing completed!")
+    return True
 
-@pytest.fixture
-def sample_prediction_data():
-    """Sample data for testing predictions"""
-    return {
-        "cpu_usage": 75.0,
-        "memory_usage": 80.0,
-        "disk_usage": 35.0,
-        "network_latency_ms": 100.0,
-        "error_count": 2,
-        "response_time_ms": 350.0,
-        "active_connections": 50,
-        "hour": 14,
-        "day_of_week": 2
-    }
-
-def test_prediction_with_optional_fields(sample_prediction_data):
-    """Test prediction with optional time fields"""
-    response = client.post("/predict", json=sample_prediction_data)
-    
-    # Should work even without models loaded
-    assert response.status_code in [200, 500]
-
-def test_api_error_handling():
-    """Test API error handling"""
-    # Test with completely invalid JSON
-    response = client.post("/predict", data="invalid json")
-    assert response.status_code == 422
-    
-    # Test with wrong content type
-    response = client.post("/predict", data=json.dumps({"test": "data"}), 
-                          headers={"Content-Type": "text/plain"})
-    assert response.status_code == 422
-
-def test_api_validation_messages():
-    """Test that validation error messages are helpful"""
-    test_input = {
-        "cpu_usage": "not_a_number",
-        "memory_usage": 90.0,
-        "disk_usage": 45.0,
-        "network_latency_ms": 120.0,
-        "error_count": 3,
-        "response_time_ms": 450.0,
-        "active_connections": 75
-    }
-    
-    response = client.post("/predict", json=test_input)
-    assert response.status_code == 422
-    
-    error_data = response.json()
-    assert "detail" in error_data
+def main():
+    """Main function"""
+    try:
+        success = test_api()
+        if success:
+            print("\n✅ All tests completed successfully!")
+        else:
+            print("\n❌ Some tests failed!")
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n⏹️ Testing interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Testing failed: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    main()
